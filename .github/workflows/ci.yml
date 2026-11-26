@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -v
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t todo-platform:${{ github.sha }} .
+
+      - name: Login to Azure ACR
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Push to ACR
+        run: |
+          docker tag todo-platform:${{ github.sha }} ${{ secrets.ACR_LOGIN_SERVER }}/todo-platform:latest
+          docker tag todo-platform:${{ github.sha }} ${{ secrets.ACR_LOGIN_SERVER }}/todo-platform:${{ github.sha }}
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/todo-platform:latest
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/todo-platform:${{ github.sha }}
+
+      - name: Login to AWS ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+
+      - name: Push to ECR
+        if: env.AWS_ACCESS_KEY_ID != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+        run: |
+          docker tag todo-platform:${{ github.sha }} ${{ secrets.ECR_REPOSITORY_URL }}:latest
+          docker tag todo-platform:${{ github.sha }} ${{ secrets.ECR_REPOSITORY_URL }}:${{ github.sha }}
+          docker push ${{ secrets.ECR_REPOSITORY_URL }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY_URL }}:${{ github.sha }}
+
+  deploy-azure:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          resourceGroup: rg-todo-platform
+          containerAppName: ca-todo-platform
+          imageToDeploy: ${{ secrets.ACR_LOGIN_SERVER }}/todo-platform:${{ github.sha }}

@@ -1,3 +1,5 @@
+from datetime import date
+
 from app.core.models import Todo
 from app.storage.base import TodoRepository
 
@@ -13,9 +15,9 @@ class InMemoryTodoRepository(TodoRepository):
     def get(self, todo_id: int) -> Todo | None:
         return self._items.get(todo_id)
 
-    def add(self, text: str) -> Todo:
-        todo = Todo(id=self._next_id, text=text)
-        self._items[todo.id] = todo
+    def add(self, text: str, *, due_date: date | None = None) -> Todo:
+        todo = Todo(id=self._next_id, text=text, due_date=due_date)
+        self._items[self._next_id] = todo
         self._next_id += 1
         return todo
 

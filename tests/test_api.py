@@ -20,9 +20,9 @@ def test_index_is_served(client):
 def test_create_and_list(client):
     res = client.post("/api/todos", json={"text": "write tests"})
     assert res.status_code == 201
-    assert res.json() == {"id": 1, "text": "write tests", "done": False}
+    assert res.json() == {"id": 1, "text": "write tests", "done": False, "due_date": None}
     assert client.get("/api/todos").json() == [
-        {"id": 1, "text": "write tests", "done": False}
+        {"id": 1, "text": "write tests", "done": False, "due_date": None}
     ]
 
 
