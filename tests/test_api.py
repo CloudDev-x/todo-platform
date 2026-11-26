@@ -29,7 +29,7 @@ def test_create_and_list(client):
 def test_create_empty_returns_400(client):
     res = client.post("/api/todos", json={"text": "   "})
     assert res.status_code == 400
-    assert "error" in res.json()
+    assert "detail" in res.json()
 
 
 def test_toggle(client):
